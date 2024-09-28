@@ -60,13 +60,13 @@ def submit():
                     start_year = int(start_year)
                     end_year = int(end_year)
                     for year in range(start_year, end_year + 1):
-                        year_data_frames = []
-                        process_nc_file_from_drive(year, float(latitude), float(longitude), year_data_frames)
-                        if year_data_frames:
-                            prepare_and_send_response(year_data_frames, latitude, longitude, year)
+                        process_nc_file_from_drive(year, float(latitude), float(longitude), data_frames)
 
-                    flash(f"Downloaded files for range of years {start_year} to {end_year}.")
-                    return render_template('index.html')
+                    if data_frames:
+                        return prepare_and_send_response(data_frames, latitude, longitude, f'{start_year}-{end_year}', is_range=True)
+                    else:
+                        flash(f"No data found for years {start_year}-{end_year}.")
+                        return render_template('index.html')
                 else:
                     flash("Please provide valid inputs for start year, end year, latitude, and longitude.")
                     return render_template('index.html')
@@ -99,13 +99,13 @@ def submit():
                         end_year = int(end_year)
                         for year in range(start_year, end_year + 1):
                             for _, row in excel_data.iterrows():
-                                year_data_frames = []
-                                process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], year_data_frames)
-                                if year_data_frames:
-                                    prepare_and_send_response(year_data_frames, row['Latitude'], row['Longitude'], year)
+                                process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], data_frames)
                         
-                        flash(f"Downloaded files for range of years {start_year} to {end_year}.")
-                        return render_template('index.html')
+                        if data_frames:
+                            return prepare_and_send_response(data_frames, 'multiple', 'multiple', f'{start_year}-{end_year}', is_range=True)
+                        else:
+                            flash(f"No data found for years {start_year}-{end_year}.")
+                            return render_template('index.html')
                     else:
                         flash("Please provide valid inputs for start year and end year.")
                         return render_template('index.html')
@@ -203,7 +203,8 @@ def prepare_and_send_response(data_frames, latitude, longitude, year, is_range=F
     """Prepares the response by concatenating data and sending the output as an Excel file."""
     try:
         result_df = pd.concat(data_frames)
-        output_file = os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_{year}.xlsx')
+        output_file = os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_range_{year}.xlsx') if is_range else \
+                      os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_{year}.xlsx')
         result_df.to_excel(output_file, index=False)
         return send_file(output_file, as_attachment=True)
     finally:
