@@ -4,6 +4,7 @@ import netCDF4 as nc
 import numpy as np
 import pandas as pd
 import io
+import json
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -13,12 +14,13 @@ app.secret_key = 'supersecretkey'  # Required for flashing messages
 
 # Define the credentials and Google Drive folder ID
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
-SERVICE_ACCOUNT_FILE = 'C:/Users/ansum/OneDrive/Desktop/project/python_rainfall/templates/buoyant-nectar-437007-k0-b16c95d08b16.json'
-
 DRIVE_FOLDER_ID = '1kQpXiQq1B845w6JpxN2SgCeQi9MxItA4'
 
+# Read Google service account credentials from environment variable
+service_account_info = json.loads(os.environ.get('GOOGLE_SERVICE_ACCOUNT_KEY'))
+credentials = service_account.Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
+
 # Initialize Google Drive API
-credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
 drive_service = build('drive', 'v3', credentials=credentials)
 
 @app.route('/')
