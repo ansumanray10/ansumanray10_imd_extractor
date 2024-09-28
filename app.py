@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import io
 import json
+import shutil
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -29,17 +30,17 @@ def index():
 
 @app.route('/submit', methods=['POST'])
 def submit():
-    # Get the year type and coordinates from the form
     year_type = request.form.get('yearType')
     coord_type = request.form.get('coordType')
     
     data_frames = []
 
     try:
-        # Handle both single year and range of years
+        # Single coordinate type
         if coord_type == 'single':
             latitude = request.form.get('latitude')
             longitude = request.form.get('longitude')
+
             if year_type == 'single':
                 year = request.form.get('year')
                 if year and latitude and longitude:
@@ -51,6 +52,7 @@ def submit():
                 else:
                     flash("Please provide valid inputs for year, latitude, and longitude.")
                     return render_template('index.html')
+
             else:  # Range of years
                 start_year = request.form.get('start_year')
                 end_year = request.form.get('end_year')
@@ -69,7 +71,7 @@ def submit():
                     flash("Please provide valid inputs for start year, end year, latitude, and longitude.")
                     return render_template('index.html')
         
-        # Process Excel file with multiple coordinates
+        # Excel file with multiple coordinates
         elif coord_type == 'excel':
             coordinate_file = request.files.get('coordinateFile')
             if coordinate_file:
@@ -116,93 +118,98 @@ def submit():
         flash(f"An error occurred: {e}")
         return render_template('index.html')
 
-
 def process_nc_file_from_drive(year, latitude, longitude, data_frames):
     """Processes the NetCDF file from Google Drive for the given year."""
-    file_id = get_nc_file_id_from_drive(year)
-    if file_id:
-        # Download the file from Google Drive
-        file_path = download_nc_file_from_drive(file_id, year)
-        df = extract_rainfall_data(file_path, latitude, longitude, year)
-        if isinstance(df, pd.DataFrame) and not df.empty:
-            data_frames.append(df)
-            return True
-    return False
-
+    try:
+        file_id = get_nc_file_id_from_drive(year)
+        if file_id:
+            file_path = download_nc_file_from_drive(file_id, year)
+            df = extract_rainfall_data(file_path, latitude, longitude, year)
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                data_frames.append(df)
+                return True
+        return False
+    except Exception as e:
+        print(f"Error processing file from drive: {e}")
+        return False
 
 def download_nc_file_from_drive(file_id, year):
     """Downloads the NetCDF file from Google Drive to a local temp folder."""
-    request = drive_service.files().get_media(fileId=file_id)
-    file_path = os.path.join('temp_nc_files', f'rainfall_{year}.nc')
-    if not os.path.exists('temp_nc_files'):
-        os.makedirs('temp_nc_files')
-    with open(file_path, 'wb') as fh:
-        downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-            print(f"Downloading file: {int(status.progress() * 100)}% complete.")
-    return file_path
-
+    try:
+        request = drive_service.files().get_media(fileId=file_id)
+        file_path = os.path.join('temp_nc_files', f'rainfall_{year}.nc')
+        if not os.path.exists('temp_nc_files'):
+            os.makedirs('temp_nc_files')
+        with open(file_path, 'wb') as fh:
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+                print(f"Downloading file: {int(status.progress() * 100)}% complete.")
+        return file_path
+    except Exception as e:
+        print(f"Error downloading file: {e}")
+        return None
 
 def get_nc_file_id_from_drive(year):
     """Gets the file ID for a specific year from the Google Drive folder."""
-    query = f"'{DRIVE_FOLDER_ID}' in parents and name contains '{year}' and mimeType='application/x-netcdf'"
-    results = drive_service.files().list(q=query, fields="files(id, name)").execute()
-    files = results.get('files', [])
-    if files:
-        return files[0]['id']  # Return the first file found for the year
-    return None
-
+    try:
+        query = f"'{DRIVE_FOLDER_ID}' in parents and name contains '{year}' and mimeType='application/x-netcdf'"
+        results = drive_service.files().list(q=query, fields="files(id, name)").execute()
+        files = results.get('files', [])
+        if files:
+            return files[0]['id']  # Return the first file found for the year
+        return None
+    except Exception as e:
+        print(f"Error fetching file ID: {e}")
+        return None
 
 def extract_rainfall_data(file_path, target_lat, target_lon, year):
     """Extracts the rainfall data for the given coordinates from the stored NetCDF file."""
-    if os.path.exists(file_path):
-        dataset = nc.Dataset(file_path, mode='r')
+    try:
+        if os.path.exists(file_path):
+            dataset = nc.Dataset(file_path, mode='r')
 
-        # Extract latitude, longitude, and rainfall data from the NetCDF file
-        latitudes = dataset.variables['LATITUDE'][:]
-        longitudes = dataset.variables['LONGITUDE'][:]
-        rainfall = dataset.variables['RAINFALL'][:]
-        times = dataset.variables['TIME'][:]
-        time_units = dataset.variables['TIME'].units
-        dates = nc.num2date(times, units=time_units)
+            latitudes = dataset.variables['LATITUDE'][:]
+            longitudes = dataset.variables['LONGITUDE'][:]
+            rainfall = dataset.variables['RAINFALL'][:]
+            times = dataset.variables['TIME'][:]
+            time_units = dataset.variables['TIME'].units
+            dates = nc.num2date(times, units=time_units)
 
-        # Function to find the nearest index in the lat/lon arrays
-        def find_nearest(array, value):
-            return (np.abs(array - value)).argmin()
+            def find_nearest(array, value):
+                return (np.abs(array - value)).argmin()
 
-        # Find the nearest latitude and longitude indices
-        lat_idx = find_nearest(latitudes, target_lat)
-        lon_idx = find_nearest(longitudes, target_lon)
+            lat_idx = find_nearest(latitudes, target_lat)
+            lon_idx = find_nearest(longitudes, target_lon)
 
-        # Extract rainfall data for the specified lat/lon
-        rainfall_data = rainfall[:, lat_idx, lon_idx]
+            rainfall_data = rainfall[:, lat_idx, lon_idx]
 
-        # Create a DataFrame with the extracted data and corresponding dates
-        df_extracted = pd.DataFrame({
-            'Date': dates,
-            'Latitude': [target_lat] * len(rainfall_data),
-            'Longitude': [target_lon] * len(rainfall_data),
-            'Rainfall': rainfall_data
-        })
+            df_extracted = pd.DataFrame({
+                'Date': dates,
+                'Latitude': [target_lat] * len(rainfall_data),
+                'Longitude': [target_lon] * len(rainfall_data),
+                'Rainfall': rainfall_data
+            })
 
-        # Close the dataset
-        dataset.close()
+            dataset.close()
+            return df_extracted
 
-        return df_extracted
-
-    return None
-
+    except Exception as e:
+        print(f"Error extracting data from NetCDF: {e}")
+        return None
 
 def prepare_and_send_response(data_frames, latitude, longitude, year, is_range=False):
     """Prepares the response by concatenating data and sending the output as an Excel file."""
-    result_df = pd.concat(data_frames)
-    output_file = os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_range_{year}.xlsx') if is_range else \
-                  os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_{year}.xlsx')
-    result_df.to_excel(output_file, index=False)
-    return send_file(output_file, as_attachment=True)
-
+    try:
+        result_df = pd.concat(data_frames)
+        output_file = os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_range_{year}.xlsx') if is_range else \
+                      os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_{year}.xlsx')
+        result_df.to_excel(output_file, index=False)
+        return send_file(output_file, as_attachment=True)
+    finally:
+        # Cleanup: Remove temporary files after response is prepared
+        shutil.rmtree('temp_nc_files', ignore_errors=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
