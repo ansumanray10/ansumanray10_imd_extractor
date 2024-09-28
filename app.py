@@ -37,11 +37,11 @@ def submit():
 
             if year_type == 'single':
                 year = request.form.get('year')
-                return process_single_point_single_year(latitude, longitude, year)
+                process_single_point_single_year(latitude, longitude, year)
             else:  # Range of years
                 start_year = int(request.form.get('start_year'))
                 end_year = int(request.form.get('end_year'))
-                return process_single_point_range_years(latitude, longitude, start_year, end_year)
+                process_single_point_range_years(latitude, longitude, start_year, end_year)
 
         # Excel coordinates
         elif coord_type == 'excel':
@@ -51,11 +51,11 @@ def submit():
 
                 if year_type == 'single':
                     year = request.form.get('year')
-                    return process_multiple_points_single_year(excel_data, year)
+                    process_multiple_points_single_year(excel_data, year)
                 else:  # Range of years
                     start_year = int(request.form.get('start_year'))
                     end_year = int(request.form.get('end_year'))
-                    return process_multiple_points_range_years(excel_data, start_year, end_year)
+                    process_multiple_points_range_years(excel_data, start_year, end_year)
 
         return render_template('index.html')
     except Exception as e:
@@ -76,7 +76,7 @@ def process_single_point_range_years(latitude, longitude, start_year, end_year):
     for year in range(start_year, end_year + 1):
         data_frames = []
         process_nc_file_from_drive(year, latitude, longitude, data_frames)
-        return prepare_and_send_response(data_frames, latitude, longitude, year)
+        prepare_and_send_response(data_frames, latitude, longitude, year)
 
 
 def process_multiple_points_single_year(excel_data, year):
@@ -84,7 +84,7 @@ def process_multiple_points_single_year(excel_data, year):
     for _, row in excel_data.iterrows():
         data_frames = []
         process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], data_frames)
-        return prepare_and_send_response(data_frames, row['Latitude'], row['Longitude'], year)
+        prepare_and_send_response(data_frames, row['Latitude'], row['Longitude'], year)
 
 
 def process_multiple_points_range_years(excel_data, start_year, end_year):
@@ -93,7 +93,7 @@ def process_multiple_points_range_years(excel_data, start_year, end_year):
         for _, row in excel_data.iterrows():
             data_frames = []
             process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], data_frames)
-            return prepare_and_send_response(data_frames, row['Latitude'], row['Longitude'], year)
+            prepare_and_send_response(data_frames, row['Latitude'], row['Longitude'], year)
 
 
 def process_nc_file_from_drive(year, latitude, longitude, data_frames):
@@ -177,7 +177,7 @@ def prepare_and_send_response(data_frames, latitude, longitude, year):
         # Verify if the file was saved correctly
         if os.path.exists(output_file):
             print(f"File exists: {output_file} with size {os.path.getsize(output_file)} bytes.")
-            return send_file(output_file, as_attachment=True, cache_timeout=0)  # Ensure cache_timeout=0 for immediate download
+            return send_file(output_file, as_attachment=True)
         else:
             print("File does not exist.")
             flash("Error: Could not generate the file.")
