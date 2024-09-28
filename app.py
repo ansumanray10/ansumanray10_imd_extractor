@@ -59,14 +59,7 @@ def submit():
                 if start_year and end_year and latitude and longitude:
                     start_year = int(start_year)
                     end_year = int(end_year)
-                    for year in range(start_year, end_year + 1):
-                        process_nc_file_from_drive(year, float(latitude), float(longitude), data_frames)
-
-                    if data_frames:
-                        return prepare_and_send_response(data_frames, latitude, longitude, f'{start_year}-{end_year}', is_range=True)
-                    else:
-                        flash(f"No data found for years {start_year}-{end_year}.")
-                        return render_template('index.html')
+                    process_single_point_range_years(float(latitude), float(longitude), start_year, end_year)
                 else:
                     flash("Please provide valid inputs for start year, end year, latitude, and longitude.")
                     return render_template('index.html')
@@ -117,6 +110,15 @@ def submit():
         print(f"An error occurred: {e}")
         flash(f"An error occurred: {e}")
         return render_template('index.html')
+
+def process_single_point_range_years(latitude, longitude, start_year, end_year):
+    """ Process a single point for a range of years and generate separate files. """
+    for year in range(start_year, end_year + 1):
+        data_frames = []
+        if process_nc_file_from_drive(year, latitude, longitude, data_frames):
+            prepare_and_send_response(data_frames, latitude, longitude, year)
+        else:
+            flash(f"Failed to process data for year {year}.")
 
 def process_nc_file_from_drive(year, latitude, longitude, data_frames):
     """Processes the NetCDF file from Google Drive for the given year."""
@@ -203,8 +205,7 @@ def prepare_and_send_response(data_frames, latitude, longitude, year, is_range=F
     """Prepares the response by concatenating data and sending the output as an Excel file."""
     try:
         result_df = pd.concat(data_frames)
-        output_file = os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_range_{year}.xlsx') if is_range else \
-                      os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_{year}.xlsx')
+        output_file = os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_{year}.xlsx')
         result_df.to_excel(output_file, index=False)
         return send_file(output_file, as_attachment=True)
     finally:
