@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rainfall Data Extractor</title>
+    <!-- Include Bootstrap CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            margin-top: 100px;
+        }
+        .card {
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+    <script>
+        // Toggle year input type (single year vs range of years)
+        function toggleYearInput() {
+            let yearType = document.getElementById('yearType').value;
+            let singleYearInput = document.getElementById('singleYearInput');
+            let rangeYearInput = document.getElementById('rangeYearInput');
+            let yearField = document.getElementById('year');
+            let startYearField = document.getElementById('start_year');
+            let endYearField = document.getElementById('end_year');
+            
+            if (yearType === 'single') {
+                singleYearInput.style.display = 'block';
+                yearField.required = true;
+                rangeYearInput.style.display = 'none';
+                startYearField.required = false;
+                endYearField.required = false;
+            } else {
+                singleYearInput.style.display = 'none';
+                yearField.required = false;
+                rangeYearInput.style.display = 'block';
+                startYearField.required = true;
+                endYearField.required = true;
+            }
+        }
+
+        // Toggle coordinate input type (single coordinate vs Excel upload)
+        function toggleCoordinateInput() {
+            let coordType = document.getElementById('coordType').value;
+            let singleCoordInput = document.getElementById('singleCoordInput');
+            let excelUploadInput = document.getElementById('excelUploadInput');
+            let latitudeField = document.getElementById('latitude');
+            let longitudeField = document.getElementById('longitude');
+            let coordinateFileField = document.getElementById('coordinateFile');
+
+            if (coordType === 'single') {
+                singleCoordInput.style.display = 'block';
+                latitudeField.required = true;
+                longitudeField.required = true;
+                excelUploadInput.style.display = 'none';
+                coordinateFileField.required = false;
+            } else {
+                singleCoordInput.style.display = 'none';
+                latitudeField.required = false;
+                longitudeField.required = false;
+                excelUploadInput.style.display = 'block';
+                coordinateFileField.required = true;
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <h2 class="text-center mb-4">Rainfall Data Extractor</h2>
+                    <form method="POST" action="/submit" enctype="multipart/form-data">
+                        <!-- Year Input Section -->
+                        <div class="mb-3">
+                            <label for="yearType" class="form-label">Year Input Type:</label>
+                            <select id="yearType" class="form-select" name="yearType" onchange="toggleYearInput()">
+                                <option value="single">Single Year</option>
+                                <option value="range">Range of Years</option>
+                            </select>
+                        </div>
+                        <div class="mb-3" id="singleYearInput">
+                            <label for="year" class="form-label">Year:</label>
+                            <input type="text" class="form-control" id="year" name="year" placeholder="Enter year (e.g. 1980)" required>
+                        </div>
+                        <div class="mb-3" id="rangeYearInput" style="display: none;">
+                            <label for="start_year" class="form-label">Start Year:</label>
+                            <input type="text" class="form-control" id="start_year" name="start_year" placeholder="Enter start year (e.g. 1980)">
+                            <label for="end_year" class="form-label mt-2">End Year:</label>
+                            <input type="text" class="form-control" id="end_year" name="end_year" placeholder="Enter end year (e.g. 2000)">
+                        </div>
+
+                        <!-- Coordinate Input Section -->
+                        <div class="mb-3">
+                            <label for="coordType" class="form-label">Coordinate Input Type:</label>
+                            <select id="coordType" class="form-select" name="coordType" onchange="toggleCoordinateInput()">
+                                <option value="single">Single Coordinate</option>
+                                <option value="excel">Upload Excel File (Latitude, Longitude)</option>
+                            </select>
+                        </div>
+                        <div id="singleCoordInput">
+                            <div class="mb-3">
+                                <label for="latitude" class="form-label">Latitude:</label>
+                                <input type="text" class="form-control" id="latitude" name="latitude" placeholder="Enter latitude (e.g. 12.5)" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="longitude" class="form-label">Longitude:</label>
+                                <input type="text" class="form-control" id="longitude" name="longitude" placeholder="Enter longitude (e.g. 75.0)" required>
+                            </div>
+                        </div>
+                        <div id="excelUploadInput" style="display: none;">
+                            <div class="mb-3">
+                                <label for="coordinateFile" class="form-label">Upload Excel File:</label>
+                                <input type="file" class="form-control" id="coordinateFile" name="coordinateFile">
+                            </div>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-success">Get Rainfall Data</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
