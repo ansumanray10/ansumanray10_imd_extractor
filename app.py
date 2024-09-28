@@ -63,13 +63,11 @@ def submit():
         flash(f"An error occurred: {e}")
         return render_template('index.html')
 
-
 def process_single_point_single_year(latitude, longitude, year):
     """ Process a single point for a single year """
     data_frames = []
     process_nc_file_from_drive(year, latitude, longitude, data_frames)
     return prepare_and_send_response(data_frames, latitude, longitude, year)
-
 
 def process_single_point_range_years(latitude, longitude, start_year, end_year):
     """ Process a single point for a range of years """
@@ -78,14 +76,12 @@ def process_single_point_range_years(latitude, longitude, start_year, end_year):
         process_nc_file_from_drive(year, latitude, longitude, data_frames)
         prepare_and_send_response(data_frames, latitude, longitude, year)
 
-
 def process_multiple_points_single_year(excel_data, year):
     """ Process multiple points from Excel for a single year """
     for _, row in excel_data.iterrows():
         data_frames = []
         process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], data_frames)
         prepare_and_send_response(data_frames, row['Latitude'], row['Longitude'], year)
-
 
 def process_multiple_points_range_years(excel_data, start_year, end_year):
     """ Process multiple points from Excel for a range of years """
@@ -94,7 +90,6 @@ def process_multiple_points_range_years(excel_data, start_year, end_year):
             data_frames = []
             process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], data_frames)
             prepare_and_send_response(data_frames, row['Latitude'], row['Longitude'], year)
-
 
 def process_nc_file_from_drive(year, latitude, longitude, data_frames):
     """ Process NetCDF file from Google Drive """
@@ -106,7 +101,6 @@ def process_nc_file_from_drive(year, latitude, longitude, data_frames):
             data_frames.append(df)
             return True
     return False
-
 
 def download_nc_file_from_drive(file_id, year):
     """ Download NetCDF file """
@@ -122,7 +116,6 @@ def download_nc_file_from_drive(file_id, year):
             print(f"Downloading file: {int(status.progress() * 100)}% complete.")
     return file_path
 
-
 def get_nc_file_id_from_drive(year):
     """ Get the file ID for a specific year from Google Drive """
     query = f"'{DRIVE_FOLDER_ID}' in parents and name contains '{year}' and mimeType='application/x-netcdf'"
@@ -131,7 +124,6 @@ def get_nc_file_id_from_drive(year):
     if files:
         return files[0]['id']  # Return the first file found for the year
     return None
-
 
 def extract_rainfall_data(file_path, target_lat, target_lon, year):
     """ Extract rainfall data for given coordinates from NetCDF file """
@@ -164,7 +156,6 @@ def extract_rainfall_data(file_path, target_lat, target_lon, year):
         return df_extracted
     return None
 
-
 def prepare_and_send_response(data_frames, latitude, longitude, year):
     """ Prepare response by sending the extracted data as an Excel file """
     try:
@@ -189,7 +180,6 @@ def prepare_and_send_response(data_frames, latitude, longitude, year):
     finally:
         # Cleanup: Remove temporary files after sending the response
         shutil.rmtree('temp_nc_files', ignore_errors=True)
-
 
 if __name__ == '__main__':
     app.run(debug=True)
