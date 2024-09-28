@@ -59,7 +59,14 @@ def submit():
                 if start_year and end_year and latitude and longitude:
                     start_year = int(start_year)
                     end_year = int(end_year)
-                    process_single_point_range_years(float(latitude), float(longitude), start_year, end_year)
+                    for year in range(start_year, end_year + 1):
+                        year_data_frames = []
+                        process_nc_file_from_drive(year, float(latitude), float(longitude), year_data_frames)
+                        if year_data_frames:
+                            prepare_and_send_response(year_data_frames, latitude, longitude, year)
+
+                    flash(f"Downloaded files for range of years {start_year} to {end_year}.")
+                    return render_template('index.html')
                 else:
                     flash("Please provide valid inputs for start year, end year, latitude, and longitude.")
                     return render_template('index.html')
@@ -92,13 +99,13 @@ def submit():
                         end_year = int(end_year)
                         for year in range(start_year, end_year + 1):
                             for _, row in excel_data.iterrows():
-                                process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], data_frames)
+                                year_data_frames = []
+                                process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], year_data_frames)
+                                if year_data_frames:
+                                    prepare_and_send_response(year_data_frames, row['Latitude'], row['Longitude'], year)
                         
-                        if data_frames:
-                            return prepare_and_send_response(data_frames, 'multiple', 'multiple', f'{start_year}-{end_year}', is_range=True)
-                        else:
-                            flash(f"No data found for years {start_year}-{end_year}.")
-                            return render_template('index.html')
+                        flash(f"Downloaded files for range of years {start_year} to {end_year}.")
+                        return render_template('index.html')
                     else:
                         flash("Please provide valid inputs for start year and end year.")
                         return render_template('index.html')
@@ -110,15 +117,6 @@ def submit():
         print(f"An error occurred: {e}")
         flash(f"An error occurred: {e}")
         return render_template('index.html')
-
-def process_single_point_range_years(latitude, longitude, start_year, end_year):
-    """ Process a single point for a range of years and generate separate files. """
-    for year in range(start_year, end_year + 1):
-        data_frames = []
-        if process_nc_file_from_drive(year, latitude, longitude, data_frames):
-            prepare_and_send_response(data_frames, latitude, longitude, year)
-        else:
-            flash(f"Failed to process data for year {year}.")
 
 def process_nc_file_from_drive(year, latitude, longitude, data_frames):
     """Processes the NetCDF file from Google Drive for the given year."""
