@@ -14,7 +14,7 @@ import xlsxwriter
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # Required for flashing messages
 
-# Define the credentials and Google Drive folder Id
+# Define the credentials and Google Drive folder ID
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 DRIVE_FOLDER_ID = '1kQpXiQq1B845w6JpxN2SgCeQi9MxItA4'
 
@@ -28,6 +28,11 @@ drive_service = build('drive', 'v3', credentials=credentials)
 @app.route('/')
 def index():
     return render_template('index.html')
+
+# Route to serve the Google verification file
+@app.route('/<filename>')
+def google_verification(filename):
+    return send_file(os.path.join('templates', filename))
 
 @app.route('/submit', methods=['POST'])
 def submit():
