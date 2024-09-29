@@ -33,8 +33,6 @@ def submit():
     year_type = request.form.get('yearType')
     coord_type = request.form.get('coordType')
     
-    data_frames = []
-
     try:
         # Single coordinate type
         if coord_type == 'single':
@@ -44,8 +42,9 @@ def submit():
             if year_type == 'single':
                 year = request.form.get('year')
                 if year and latitude and longitude:
+                    data_frames = []
                     if process_nc_file_from_drive(year, float(latitude), float(longitude), data_frames):
-                        return prepare_and_send_response(data_frames, latitude, longitude, year)
+                        return prepare_and_send_response([(data_frames[0], latitude, longitude, year)], latitude, longitude, year)
                     else:
                         flash(f"Failed to process data for year {year}.")
                         return render_template('index.html')
@@ -59,14 +58,7 @@ def submit():
                 if start_year and end_year and latitude and longitude:
                     start_year = int(start_year)
                     end_year = int(end_year)
-                    for year in range(start_year, end_year + 1):
-                        process_nc_file_from_drive(year, float(latitude), float(longitude), data_frames)
-
-                    if data_frames:
-                        return prepare_and_send_response(data_frames, latitude, longitude, f'{start_year}-{end_year}', is_range=True)
-                    else:
-                        flash(f"No data found for years {start_year}-{end_year}.")
-                        return render_template('index.html')
+                    return process_single_point_range_years(float(latitude), float(longitude), start_year, end_year)
                 else:
                     flash("Please provide valid inputs for start year, end year, latitude, and longitude.")
                     return render_template('index.html')
@@ -82,14 +74,7 @@ def submit():
                 
                 if year_type == 'single':
                     year = request.form.get('year')
-                    for _, row in excel_data.iterrows():
-                        process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], data_frames)
-                    
-                    if data_frames:
-                        return prepare_and_send_response(data_frames, 'multiple', 'multiple', year)
-                    else:
-                        flash(f"No data found for year {year}.")
-                        return render_template('index.html')
+                    return process_multiple_points_single_year(excel_data, year)
 
                 else:  # Range of years
                     start_year = request.form.get('start_year')
@@ -97,15 +82,7 @@ def submit():
                     if start_year and end_year:
                         start_year = int(start_year)
                         end_year = int(end_year)
-                        for year in range(start_year, end_year + 1):
-                            for _, row in excel_data.iterrows():
-                                process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], data_frames)
-                        
-                        if data_frames:
-                            return prepare_and_send_response(data_frames, 'multiple', 'multiple', f'{start_year}-{end_year}', is_range=True)
-                        else:
-                            flash(f"No data found for years {start_year}-{end_year}.")
-                            return render_template('index.html')
+                        return process_multiple_points_range_years(excel_data, start_year, end_year)
                     else:
                         flash("Please provide valid inputs for start year and end year.")
                         return render_template('index.html')
@@ -116,6 +93,46 @@ def submit():
     except Exception as e:
         print(f"An error occurred: {e}")
         flash(f"An error occurred: {e}")
+        return render_template('index.html')
+
+def process_single_point_range_years(latitude, longitude, start_year, end_year):
+    """ Process a single point for a range of years with separate sheets """
+    data_frames = []
+    for year in range(start_year, end_year + 1):
+        temp_frames = []
+        if process_nc_file_from_drive(year, latitude, longitude, temp_frames):
+            data_frames.append((temp_frames[0], latitude, longitude, year))  # Collecting df, lat, lon, year
+    if data_frames:
+        return prepare_and_send_response(data_frames, latitude, longitude, f'{start_year}-{end_year}', is_range=True)
+    else:
+        flash(f"No data found for years {start_year}-{end_year}.")
+        return render_template('index.html')
+
+def process_multiple_points_single_year(excel_data, year):
+    """ Process multiple points from Excel for a single year with separate sheets """
+    data_frames = []
+    for _, row in excel_data.iterrows():
+        temp_frames = []
+        if process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], temp_frames):
+            data_frames.append((temp_frames[0], row['Latitude'], row['Longitude'], year))  # Collecting df, lat, lon, year
+    if data_frames:
+        return prepare_and_send_response(data_frames, 'multiple', 'multiple', year)
+    else:
+        flash(f"No data found for year {year}.")
+        return render_template('index.html')
+
+def process_multiple_points_range_years(excel_data, start_year, end_year):
+    """ Process multiple points from Excel for a range of years with separate sheets """
+    data_frames = []
+    for year in range(start_year, end_year + 1):
+        for _, row in excel_data.iterrows():
+            temp_frames = []
+            if process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], temp_frames):
+                data_frames.append((temp_frames[0], row['Latitude'], row['Longitude'], year))  # Collecting df, lat, lon, year
+    if data_frames:
+        return prepare_and_send_response(data_frames, 'multiple', 'multiple', f'{start_year}-{end_year}', is_range=True)
+    else:
+        flash(f"No data found for years {start_year}-{end_year}.")
         return render_template('index.html')
 
 def process_nc_file_from_drive(year, latitude, longitude, data_frames):
@@ -200,13 +217,24 @@ def extract_rainfall_data(file_path, target_lat, target_lon, year):
         return None
 
 def prepare_and_send_response(data_frames, latitude, longitude, year, is_range=False):
-    """Prepares the response by concatenating data and sending the output as an Excel file."""
+    """Prepares the response by concatenating data and sending the output as an Excel file with multiple sheets."""
     try:
-        result_df = pd.concat(data_frames)
-        output_file = os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_range_{year}.xlsx') if is_range else \
-                      os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_{year}.xlsx')
-        result_df.to_excel(output_file, index=False)
-        return send_file(output_file, as_attachment=True)
+        # Create a Pandas Excel writer using XlsxWriter as the engine
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            # Loop over each data frame (which corresponds to different years or coordinates) and save to a separate sheet
+            for df, lat, lon, yr in data_frames:
+                sheet_name = f'{yr}_{lat}_{lon}'
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+        # Save the Excel file
+        output.seek(0)
+
+        # Set filename dynamically based on input
+        filename = f'rainfall_data_{latitude}_{longitude}_{year}.xlsx' if not is_range else f'rainfall_data_{latitude}_{longitude}_range_{year}.xlsx'
+
+        # Send the file to the user as an attachment
+        return send_file(output, as_attachment=True, download_name=filename, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     finally:
         # Cleanup: Remove temporary files after response is prepared
         shutil.rmtree('temp_nc_files', ignore_errors=True)
