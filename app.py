@@ -9,6 +9,7 @@ import shutil
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
+import xlsxwriter
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # Required for flashing messages
@@ -42,12 +43,7 @@ def submit():
             if year_type == 'single':
                 year = request.form.get('year')
                 if year and latitude and longitude:
-                    data_frames = []
-                    if process_nc_file_from_drive(year, float(latitude), float(longitude), data_frames):
-                        return prepare_and_send_response([(data_frames[0], latitude, longitude, year)], latitude, longitude, year)
-                    else:
-                        flash(f"Failed to process data for year {year}.")
-                        return render_template('index.html')
+                    return process_single_coordinate_single_year(float(latitude), float(longitude), int(year))
                 else:
                     flash("Please provide valid inputs for year, latitude, and longitude.")
                     return render_template('index.html')
@@ -56,9 +52,7 @@ def submit():
                 start_year = request.form.get('start_year')
                 end_year = request.form.get('end_year')
                 if start_year and end_year and latitude and longitude:
-                    start_year = int(start_year)
-                    end_year = int(end_year)
-                    return process_single_point_range_years(float(latitude), float(longitude), start_year, end_year)
+                    return process_single_coordinate_multiple_years(float(latitude), float(longitude), int(start_year), int(end_year))
                 else:
                     flash("Please provide valid inputs for start year, end year, latitude, and longitude.")
                     return render_template('index.html')
@@ -74,15 +68,17 @@ def submit():
                 
                 if year_type == 'single':
                     year = request.form.get('year')
-                    return process_multiple_points_single_year(excel_data, year)
+                    if year:
+                        return process_multiple_coordinates_single_year(excel_data, int(year))
+                    else:
+                        flash("Please provide a valid year.")
+                        return render_template('index.html')
 
                 else:  # Range of years
                     start_year = request.form.get('start_year')
                     end_year = request.form.get('end_year')
                     if start_year and end_year:
-                        start_year = int(start_year)
-                        end_year = int(end_year)
-                        return process_multiple_points_range_years(excel_data, start_year, end_year)
+                        return process_multiple_coordinates_multiple_years(excel_data, int(start_year), int(end_year))
                     else:
                         flash("Please provide valid inputs for start year and end year.")
                         return render_template('index.html')
@@ -95,45 +91,38 @@ def submit():
         flash(f"An error occurred: {e}")
         return render_template('index.html')
 
-def process_single_point_range_years(latitude, longitude, start_year, end_year):
-    """ Process a single point for a range of years with separate sheets """
+
+def process_single_coordinate_single_year(latitude, longitude, year):
+    """ Process a single coordinate for a single year and return the Excel file with one sheet. """
+    data_frames = []
+    process_nc_file_from_drive(year, latitude, longitude, data_frames)
+    return prepare_and_send_excel(data_frames, latitude, longitude, year)
+
+
+def process_single_coordinate_multiple_years(latitude, longitude, start_year, end_year):
+    """ Process a single coordinate for a range of years and return the Excel file with multiple sheets. """
     data_frames = []
     for year in range(start_year, end_year + 1):
-        temp_frames = []
-        if process_nc_file_from_drive(year, latitude, longitude, temp_frames):
-            data_frames.append((temp_frames[0], latitude, longitude, year))  # Collecting df, lat, lon, year
-    if data_frames:
-        return prepare_and_send_response(data_frames, latitude, longitude, f'{start_year}-{end_year}', is_range=True)
-    else:
-        flash(f"No data found for years {start_year}-{end_year}.")
-        return render_template('index.html')
+        process_nc_file_from_drive(year, latitude, longitude, data_frames)
+    return prepare_and_send_excel(data_frames, latitude, longitude, f'{start_year}_{end_year}', is_multiple_sheets=True)
 
-def process_multiple_points_single_year(excel_data, year):
-    """ Process multiple points from Excel for a single year with separate sheets """
+
+def process_multiple_coordinates_single_year(excel_data, year):
+    """ Process multiple coordinates for a single year and return the Excel file with multiple sheets. """
     data_frames = []
     for _, row in excel_data.iterrows():
-        temp_frames = []
-        if process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], temp_frames):
-            data_frames.append((temp_frames[0], row['Latitude'], row['Longitude'], year))  # Collecting df, lat, lon, year
-    if data_frames:
-        return prepare_and_send_response(data_frames, 'multiple', 'multiple', year)
-    else:
-        flash(f"No data found for year {year}.")
-        return render_template('index.html')
+        process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], data_frames)
+    return prepare_and_send_excel(data_frames, 'multiple', 'multiple', year, is_multiple_sheets=True)
 
-def process_multiple_points_range_years(excel_data, start_year, end_year):
-    """ Process multiple points from Excel for a range of years with separate sheets """
+
+def process_multiple_coordinates_multiple_years(excel_data, start_year, end_year):
+    """ Process multiple coordinates for a range of years and return the Excel file with multiple sheets. """
     data_frames = []
     for year in range(start_year, end_year + 1):
         for _, row in excel_data.iterrows():
-            temp_frames = []
-            if process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], temp_frames):
-                data_frames.append((temp_frames[0], row['Latitude'], row['Longitude'], year))  # Collecting df, lat, lon, year
-    if data_frames:
-        return prepare_and_send_response(data_frames, 'multiple', 'multiple', f'{start_year}-{end_year}', is_range=True)
-    else:
-        flash(f"No data found for years {start_year}-{end_year}.")
-        return render_template('index.html')
+            process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], data_frames)
+    return prepare_and_send_excel(data_frames, 'multiple', 'multiple', f'{start_year}_{end_year}', is_multiple_sheets=True)
+
 
 def process_nc_file_from_drive(year, latitude, longitude, data_frames):
     """Processes the NetCDF file from Google Drive for the given year."""
@@ -143,7 +132,7 @@ def process_nc_file_from_drive(year, latitude, longitude, data_frames):
             file_path = download_nc_file_from_drive(file_id, year)
             df = extract_rainfall_data(file_path, latitude, longitude, year)
             if isinstance(df, pd.DataFrame) and not df.empty:
-                data_frames.append(df)
+                data_frames.append((df, f"{year}_{latitude}_{longitude}"))
                 return True
         return False
     except Exception as e:
@@ -216,28 +205,14 @@ def extract_rainfall_data(file_path, target_lat, target_lon, year):
         print(f"Error extracting data from NetCDF: {e}")
         return None
 
-def prepare_and_send_response(data_frames, latitude, longitude, year, is_range=False):
-    """Prepares the response by concatenating data and sending the output as an Excel file with multiple sheets."""
-    try:
-        # Create a Pandas Excel writer using XlsxWriter as the engine
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            # Loop over each data frame (which corresponds to different years or coordinates) and save to a separate sheet
-            for df, lat, lon, yr in data_frames:
-                sheet_name = f'{yr}_{lat}_{lon}'
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
-
-        # Save the Excel file
-        output.seek(0)
-
-        # Set filename dynamically based on input
-        filename = f'rainfall_data_{latitude}_{longitude}_{year}.xlsx' if not is_range else f'rainfall_data_{latitude}_{longitude}_range_{year}.xlsx'
-
-        # Send the file to the user as an attachment
-        return send_file(output, as_attachment=True, download_name=filename, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    finally:
-        # Cleanup: Remove temporary files after response is prepared
-        shutil.rmtree('temp_nc_files', ignore_errors=True)
+def prepare_and_send_excel(data_frames, latitude, longitude, year, is_multiple_sheets=False):
+    """Prepares the response by concatenating data and sending the output as an Excel file."""
+    output_file = os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_{year}.xlsx')
+    with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
+        for df, sheet_name in data_frames:
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+    
+    return send_file(output_file, as_attachment=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
