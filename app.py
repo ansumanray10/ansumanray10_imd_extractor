@@ -14,7 +14,7 @@ import xlsxwriter
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # Required for flashing messages
 
-# Define the credentials and Google Drive folder ID
+# Define the credentials and Google Drive folder Id
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 DRIVE_FOLDER_ID = '1kQpXiQq1B845w6JpxN2SgCeQi9MxItA4'
 
