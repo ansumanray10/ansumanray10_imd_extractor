@@ -3,34 +3,17 @@ import os
 import netCDF4 as nc
 import numpy as np
 import pandas as pd
-import json
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
 import xlsxwriter
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # Required for flashing messages
 
-# Define the credentials and Google Drive folder ID
-SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
-DRIVE_FOLDER_ID = '1kQpXiQq1B845w6JpxN2SgCeQi9MxItA4'
-
-# Read Google service account credentials from environment variable
-service_account_info = json.loads(os.environ.get('GOOGLE_SERVICE_ACCOUNT_KEY'))
-credentials = service_account.Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
-
-# Initialize Google Drive API
-drive_service = build('drive', 'v3', credentials=credentials)
+# Define the path to your persistent data where NetCDF files are stored
+PERSISTENT_DATA_PATH = '/persistent_data/rainfall_nc/'
 
 @app.route('/')
 def index():
     return render_template('index.html')
-
-# Route to serve the Google verification file
-@app.route('/<filename>')
-def google_verification(filename):
-    return send_file(os.path.join('templates', filename))
 
 @app.route('/submit', methods=['POST'])
 def submit():
@@ -94,90 +77,52 @@ def submit():
         flash(f"An error occurred: {e}")
         return render_template('index.html')
 
+
 def process_single_coordinate_single_year(latitude, longitude, year):
     """ Process a single coordinate for a single year and return the Excel file with one sheet. """
     data_frames = []
-    process_nc_file_from_drive(year, latitude, longitude, data_frames)
+    process_nc_file_from_persistent(year, latitude, longitude, data_frames)
     return prepare_and_send_excel(data_frames, latitude, longitude, year)
+
 
 def process_single_coordinate_multiple_years(latitude, longitude, start_year, end_year):
     """ Process a single coordinate for a range of years and return the Excel file with multiple sheets. """
     data_frames = []
     for year in range(start_year, end_year + 1):
-        process_nc_file_from_drive(year, latitude, longitude, data_frames)
+        process_nc_file_from_persistent(year, latitude, longitude, data_frames)
     return prepare_and_send_excel(data_frames, latitude, longitude, f'{start_year}_{end_year}', is_multiple_sheets=True)
+
 
 def process_multiple_coordinates_single_year(excel_data, year):
     """ Process multiple coordinates for a single year and return the Excel file with multiple sheets. """
     data_frames = []
     for _, row in excel_data.iterrows():
-        process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], data_frames)
+        process_nc_file_from_persistent(year, row['Latitude'], row['Longitude'], data_frames)
     return prepare_and_send_excel(data_frames, 'multiple', 'multiple', year, is_multiple_sheets=True)
+
 
 def process_multiple_coordinates_multiple_years(excel_data, start_year, end_year):
     """ Process multiple coordinates for a range of years and return the Excel file with multiple sheets. """
     data_frames = []
     for year in range(start_year, end_year + 1):
         for _, row in excel_data.iterrows():
-            process_nc_file_from_drive(year, row['Latitude'], row['Longitude'], data_frames)
+            process_nc_file_from_persistent(year, row['Latitude'], row['Longitude'], data_frames)
     return prepare_and_send_excel(data_frames, 'multiple', 'multiple', f'{start_year}_{end_year}', is_multiple_sheets=True)
 
-def process_nc_file_from_drive(year, latitude, longitude, data_frames):
-    """Processes the NetCDF file from Google Drive for the given year."""
+
+def process_nc_file_from_persistent(year, latitude, longitude, data_frames):
+    """Processes the NetCDF file directly from the persistent data directory for the given year."""
     try:
-        # Check if the file is already cached locally
-        file_id = get_nc_file_id_from_drive(year)
-        if file_id:
-            file_path = download_nc_file_from_drive(file_id, year)
-            df = extract_rainfall_data(file_path, latitude, longitude, year)
-            if isinstance(df, pd.DataFrame) and not df.empty:
-                data_frames.append((df, f"{year}_{latitude}_{longitude}"))
-                return True
+        file_path = os.path.join(PERSISTENT_DATA_PATH, f'RF25_ind{year}_rfp25.nc')
+        df = extract_rainfall_data(file_path, latitude, longitude, year)
+        if isinstance(df, pd.DataFrame) and not df.empty:
+            data_frames.append((df, f"{year}_{latitude}_{longitude}"))
+            return True
         return False
     except Exception as e:
-        print(f"Error processing file from drive: {e}")
+        print(f"Error processing file from persistent data: {e}")
         return False
 
-def download_nc_file_from_drive(file_id, year):
-    """Downloads the NetCDF file from Google Drive to a local temp folder (caching mechanism)."""
-    try:
-        # File path where NetCDF files are stored
-        file_path = os.path.join('temp_nc_files', f'rainfall_{year}.nc')
-        
-        # Check if the file already exists locally (cached)
-        if os.path.exists(file_path):
-            print(f"File for year {year} is already cached.")
-            return file_path
-
-        # If file doesn't exist locally, download it from Google Drive
-        request = drive_service.files().get_media(fileId=file_id)
-        if not os.path.exists('temp_nc_files'):
-            os.makedirs('temp_nc_files')
-        
-        with open(file_path, 'wb') as fh:
-            downloader = MediaIoBaseDownload(fh, request)
-            done = False
-            while not done:
-                status, done = downloader.next_chunk()
-                print(f"Downloading file for year {year}: {int(status.progress() * 100)}% complete.")
-        
-        return file_path
-    except Exception as e:
-        print(f"Error downloading file: {e}")
-        return None
-
-def get_nc_file_id_from_drive(year):
-    """Gets the file ID for a specific year from the Google Drive folder."""
-    try:
-        query = f"'{DRIVE_FOLDER_ID}' in parents and name contains '{year}' and mimeType='application/x-netcdf'"
-        results = drive_service.files().list(q=query, fields="files(id, name)").execute()
-        files = results.get('files', [])
-        if files:
-            return files[0]['id']  # Return the first file found for the year
-        return None
-    except Exception as e:
-        print(f"Error fetching file ID: {e}")
-        return None
 
 def extract_rainfall_data(file_path, target_lat, target_lon, year):
     """Extracts the rainfall data for the given coordinates from the stored NetCDF file."""
@@ -214,6 +159,7 @@ def extract_rainfall_data(file_path, target_lat, target_lon, year):
         print(f"Error extracting data from NetCDF: {e}")
         return None
 
+
 def prepare_and_send_excel(data_frames, latitude, longitude, year, is_multiple_sheets=False):
     """Prepares the response by concatenating data and sending the output as an Excel file."""
     output_file = os.path.join('temp_nc_files', f'rainfall_data_{latitude}_{longitude}_{year}.xlsx')
@@ -222,6 +168,7 @@ def prepare_and_send_excel(data_frames, latitude, longitude, year, is_multiple_s
             df.to_excel(writer, sheet_name=sheet_name, index=False)
     
     return send_file(output_file, as_attachment=True)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
