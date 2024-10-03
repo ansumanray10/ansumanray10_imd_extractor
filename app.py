@@ -14,6 +14,14 @@ NETCDF_DIR = '/persistent_data/rainfall_nc/'
 def index():
     return render_template('index.html')
 
+@app.route('/privacy_policy.html')
+def privacy_policy():
+    return render_template('privacy_policy.html')
+
+@app.route('/terms_of_service.html')
+def terms_of_service():
+    return render_template('terms_of_service.html')
+
 @app.route('/submit', methods=['POST'])
 def submit():
     year_type = request.form.get('yearType')
