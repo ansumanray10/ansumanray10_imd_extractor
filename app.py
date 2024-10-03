@@ -3,6 +3,7 @@ import netCDF4 as nc
 import numpy as np
 import pandas as pd
 from flask import Flask, request, send_file, flash, render_template
+import zipfile
 
 app = Flask(__name__)
 
@@ -163,7 +164,10 @@ def prepare_and_send_csv(data_frames, latitude, longitude, year, is_multiple_fil
             csv_paths.append(csv_file)
         
         # Create a zip file
-        shutil.make_archive(zip_path.replace('.zip', ''), 'zip', output_folder)
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for csv_file in csv_paths:
+                zipf.write(csv_file, os.path.basename(csv_file))
+
         return send_file(zip_path, as_attachment=True)
 
     else:
