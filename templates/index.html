@@ -8,42 +8,64 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
-            background-color: #f8f9fa;
-            color: white; /* Set default text color to white */
+            background-image: url('/static/background.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            color: #f8f9fa;
         }
         .container {
             margin-top: 100px;
         }
         .card {
-            padding: 20px;
+            padding: 30px;
             border-radius: 10px;
-            background-color: #343a40; /* Darker background for the card */
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            background-color: #2e2e2e;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
-        .card label {
-            color: #ffffff; /* Ensure labels are white */
+        .card h2 {
+            color: #ffffff;
+            font-size: 2rem;
         }
-        .card select,
-        .card input,
-        .card button {
-            color: #ffffff; /* Set text color to white */
-            background-color: #495057; /* Darker background for input fields */
-            border-color: #495057;
+        .form-label, .form-select, .form-control {
+            font-size: 1.2rem;
+            color: #ffffff;
         }
-        .card select option {
-            color: #000000; /* Set the dropdown option text to black for better contrast */
+        .form-control, .form-select {
+            background-color: #444;
+            border: none;
+            color: #ffffff;
         }
-        .card select:focus,
-        .card input:focus,
-        .card button:focus {
-            border-color: #ffffff; /* Highlight border on focus */
+        .form-select {
+            background-color: #343a40; /* Dark background for dropdown */
+        }
+        .form-select option {
+            background-color: #343a40; /* Dark background for options */
+            color: #ffffff;
+        }
+        .form-control::placeholder {
+            color: #d3d3d3;
+        }
+        .btn-success {
+            font-size: 1.2rem;
+            background-color: #28a745;
+            border: none;
+        }
+        .btn-success:hover {
+            background-color: #218838;
         }
         footer {
             margin-top: 50px;
             padding: 10px;
-            background-color: #fff;
+            background-color: #2e2e2e;
+            color: #ffffff;
             border-top: 1px solid #dee2e6;
-            color: #000; /* Footer text color */
+        }
+        a {
+            color: #ffffff;
+        }
+        a:hover {
+            color: #d3d3d3;
         }
     </style>
     <script>
