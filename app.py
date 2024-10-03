@@ -3,7 +3,6 @@ import netCDF4 as nc
 import numpy as np
 import pandas as pd
 from flask import Flask, request, send_file, flash, render_template
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 app = Flask(__name__)
 
@@ -83,29 +82,23 @@ def process_single_coordinate_single_year(latitude, longitude, year):
 def process_single_coordinate_multiple_years(latitude, longitude, start_year, end_year):
     """Process a single coordinate for a range of years and return the Excel file with multiple sheets."""
     data_frames = []
-    with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(process_nc_file, year, latitude, longitude, data_frames) for year in range(start_year, end_year + 1)]
-        for future in as_completed(futures):
-            future.result()  # Ensure all threads complete
+    for year in range(start_year, end_year + 1):
+        process_nc_file(year, latitude, longitude, data_frames)
     return prepare_and_send_excel(data_frames, latitude, longitude, f'{start_year}_{end_year}', is_multiple_sheets=True)
 
 def process_multiple_coordinates_single_year(excel_data, year):
     """Process multiple coordinates for a single year and return the Excel file with multiple sheets."""
     data_frames = []
-    with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(process_nc_file, year, row['Latitude'], row['Longitude'], data_frames) for _, row in excel_data.iterrows()]
-        for future in as_completed(futures):
-            future.result()  # Ensure all threads complete
+    for _, row in excel_data.iterrows():
+        process_nc_file(year, row['Latitude'], row['Longitude'], data_frames)
     return prepare_and_send_excel(data_frames, 'multiple', 'multiple', year, is_multiple_sheets=True)
 
 def process_multiple_coordinates_multiple_years(excel_data, start_year, end_year):
     """Process multiple coordinates for a range of years and return the Excel file with multiple sheets."""
     data_frames = []
-    with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(process_nc_file, year, row['Latitude'], row['Longitude'], data_frames)
-                   for year in range(start_year, end_year + 1) for _, row in excel_data.iterrows()]
-        for future in as_completed(futures):
-            future.result()  # Ensure all threads complete
+    for year in range(start_year, end_year + 1):
+        for _, row in excel_data.iterrows():
+            process_nc_file(year, row['Latitude'], row['Longitude'], data_frames)
     return prepare_and_send_excel(data_frames, 'multiple', 'multiple', f'{start_year}_{end_year}', is_multiple_sheets=True)
 
 def process_nc_file(year, latitude, longitude, data_frames):
