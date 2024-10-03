@@ -1,19 +1,13 @@
 import os
-import xarray as xr
+import netCDF4 as nc
 import numpy as np
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, request, send_file, flash, render_template
 
 app = Flask(__name__)
 
 # Define the location where NetCDF files are stored
 NETCDF_DIR = '/persistent_data/rainfall_nc/'
-OUTPUT_DIR = '/persistent_data/output/'
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-# Maximum number of threads for parallel processing
-MAX_WORKERS = 8
 
 @app.route('/')
 def index():
@@ -79,78 +73,104 @@ def submit():
         flash(f"An error occurred: {e}")
         return render_template('index.html')
 
-# Function to process a single coordinate for a single year
 def process_single_coordinate_single_year(latitude, longitude, year):
+    """Process a single coordinate for a single year and return the CSV file with one sheet."""
     data_frames = []
     process_nc_file(year, latitude, longitude, data_frames)
     return prepare_and_send_csv(data_frames, latitude, longitude, year)
 
-# Function to process a single coordinate for multiple years
 def process_single_coordinate_multiple_years(latitude, longitude, start_year, end_year):
+    """Process a single coordinate for a range of years and return the CSV file with multiple sheets."""
     data_frames = []
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = [executor.submit(process_nc_file, year, latitude, longitude, data_frames) for year in range(start_year, end_year + 1)]
-        for future in as_completed(futures):
-            future.result()
-    return prepare_and_send_csv(data_frames, latitude, longitude, f'{start_year}_{end_year}')
+    for year in range(start_year, end_year + 1):
+        process_nc_file(year, latitude, longitude, data_frames)
+    return prepare_and_send_csv(data_frames, latitude, longitude, f'{start_year}_{end_year}', is_multiple_files=True)
 
-# Function to process multiple coordinates for a single year
 def process_multiple_coordinates_single_year(excel_data, year):
+    """Process multiple coordinates for a single year and return the CSV file with multiple sheets."""
     data_frames = []
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = [executor.submit(process_nc_file, year, row['Latitude'], row['Longitude'], data_frames) for _, row in excel_data.iterrows()]
-        for future in as_completed(futures):
-            future.result()
-    return prepare_and_send_csv(data_frames, 'multiple', 'multiple', year)
+    for _, row in excel_data.iterrows():
+        process_nc_file(year, row['Latitude'], row['Longitude'], data_frames)
+    return prepare_and_send_csv(data_frames, 'multiple', 'multiple', year, is_multiple_files=True)
 
-# Function to process multiple coordinates for multiple years
 def process_multiple_coordinates_multiple_years(excel_data, start_year, end_year):
+    """Process multiple coordinates for a range of years and return the CSV file with multiple sheets."""
     data_frames = []
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = [
-            executor.submit(process_nc_file, year, row['Latitude'], row['Longitude'], data_frames)
-            for year in range(start_year, end_year + 1)
-            for _, row in excel_data.iterrows()
-        ]
-        for future in as_completed(futures):
-            future.result()
-    return prepare_and_send_csv(data_frames, 'multiple', 'multiple', f'{start_year}_{end_year}')
+    for year in range(start_year, end_year + 1):
+        for _, row in excel_data.iterrows():
+            process_nc_file(year, row['Latitude'], row['Longitude'], data_frames)
+    return prepare_and_send_csv(data_frames, 'multiple', 'multiple', f'{start_year}_{end_year}', is_multiple_files=True)
 
-# Function to process a NetCDF file for the given year and coordinates
 def process_nc_file(year, latitude, longitude, data_frames):
-    file_path = os.path.join(NETCDF_DIR, f'RF25_ind{year}_rfp25.nc')
-    df = extract_rainfall_data(file_path, latitude, longitude, year)
-    if df is not None:
-        data_frames.append((df, f"{year}_{latitude}_{longitude}"))
+    """Processes the NetCDF file for the given year from the persistent storage."""
+    try:
+        # The path of the NetCDF file stored in persistent storage
+        file_path = os.path.join(NETCDF_DIR, f'RF25_ind{year}_rfp25.nc')
+        df = extract_rainfall_data(file_path, latitude, longitude, year)
+        if isinstance(df, pd.DataFrame) and not df.empty:
+            data_frames.append((df, f"{year}_{latitude}_{longitude}"))
+            return True
+        return False
+    except Exception as e:
+        print(f"Error processing file: {e}")
+        return False
 
-# Function to extract rainfall data from NetCDF file using xarray
-def extract_rainfall_data(file_path, latitude, longitude, year):
+def extract_rainfall_data(file_path, target_lat, target_lon, year):
+    """Extracts the rainfall data for the given coordinates from the NetCDF file."""
     try:
         if os.path.exists(file_path):
-            dataset = xr.open_dataset(file_path)  # Lazy load NetCDF with xarray
-            latitudes = dataset['LATITUDE'].values
-            longitudes = dataset['LONGITUDE'].values
-            rainfall = dataset['RAINFALL'].sel(LATITUDE=latitude, LONGITUDE=longitude, method='nearest').values
-            times = pd.to_datetime(dataset['TIME'].values, unit='D', origin=pd.Timestamp('1900-01-01'))
+            dataset = nc.Dataset(file_path, mode='r')
+            latitudes = dataset.variables['LATITUDE'][:]
+            longitudes = dataset.variables['LONGITUDE'][:]
+            rainfall = dataset.variables['RAINFALL'][:]
+            times = dataset.variables['TIME'][:]
+            time_units = dataset.variables['TIME'].units
+            dates = nc.num2date(times, units=time_units)
 
-            df = pd.DataFrame({
-                'Date': times,
-                'Latitude': latitude,
-                'Longitude': longitude,
-                'Rainfall': rainfall
+            def find_nearest(array, value):
+                return (np.abs(array - value)).argmin()
+
+            lat_idx = find_nearest(latitudes, target_lat)
+            lon_idx = find_nearest(longitudes, target_lon)
+            rainfall_data = rainfall[:, lat_idx, lon_idx]
+
+            df_extracted = pd.DataFrame({
+                'Date': dates,
+                'Latitude': [target_lat] * len(rainfall_data),
+                'Longitude': [target_lon] * len(rainfall_data),
+                'Rainfall': rainfall_data
             })
-            return df
-    except Exception as e:
-        print(f"Error processing NetCDF: {e}")
-    return None
 
-# Function to prepare and send CSV files
-def prepare_and_send_csv(data_frames, latitude, longitude, year):
-    output_file = os.path.join(OUTPUT_DIR, f'rainfall_data_{latitude}_{longitude}_{year}.csv')
-    with open(output_file, mode='w', newline='', encoding='utf-8') as f:
-        for df, sheet_name in data_frames:
-            df.to_csv(f, index=False, header=True, mode='a')  # Append all data to a single CSV file
-    return send_file(output_file, as_attachment=True)
+            dataset.close()
+            return df_extracted
+
+    except Exception as e:
+        print(f"Error extracting data from NetCDF: {e}")
+        return None
+
+def prepare_and_send_csv(data_frames, latitude, longitude, year, is_multiple_files=False):
+    """Prepares the response by concatenating data and sending the output as a CSV file."""
+    output_folder = '/persistent_data/output'
+    os.makedirs(output_folder, exist_ok=True)
+    
+    # Save the data as CSV
+    if is_multiple_files:
+        zip_path = os.path.join(output_folder, f'rainfall_data_{latitude}_{longitude}_{year}.zip')
+        csv_paths = []
+        for df, file_name in data_frames:
+            csv_file = os.path.join(output_folder, f'{file_name}.csv')
+            df.to_csv(csv_file, index=False)
+            csv_paths.append(csv_file)
+        
+        # Create a zip file
+        shutil.make_archive(zip_path.replace('.zip', ''), 'zip', output_folder)
+        return send_file(zip_path, as_attachment=True)
+
+    else:
+        csv_file = os.path.join(output_folder, f'rainfall_data_{latitude}_{longitude}_{year}.csv')
+        for df, _ in data_frames:
+            df.to_csv(csv_file, index=False)
+        return send_file(csv_file, as_attachment=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
