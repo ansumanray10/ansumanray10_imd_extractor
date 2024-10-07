@@ -19,6 +19,11 @@ def submit_temperature():
             latitude = float(request.form.get('latitude'))
             longitude = float(request.form.get('longitude'))
 
+            # Validate latitude and longitude format (should end with .5)
+            if not (latitude * 10) % 10 == 5 or not (longitude * 10) % 10 == 5:
+                flash("Invalid coordinates. Latitude and Longitude must be in the format of X.5 (e.g., 12.5, 77.5).")
+                return render_template('index.html')
+
             if year_type == 'single':
                 year = int(request.form.get('year'))
                 return process_single_coordinate_single_year(latitude, longitude, year, output_folder)
@@ -37,6 +42,15 @@ def submit_temperature():
 
             if 'Latitude' not in coordinates_df.columns or 'Longitude' not in coordinates_df.columns:
                 flash("Excel file must contain 'Latitude' and 'Longitude' columns.")
+                return render_template('index.html')
+
+            # Validate latitude and longitude format for each row in the Excel file
+            invalid_coords = coordinates_df[
+                (coordinates_df['Latitude'] * 10 % 10 != 5) | 
+                (coordinates_df['Longitude'] * 10 % 10 != 5)
+            ]
+            if not invalid_coords.empty:
+                flash("Some coordinates are invalid. Latitude and Longitude must be in the format of X.5 (e.g., 12.5, 77.5).")
                 return render_template('index.html')
 
             if year_type == 'single':
