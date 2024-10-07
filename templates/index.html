@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IMD Rainfall Data Extractor</title>
+    <title>IMD Data Extractor</title>
     <!-- Include Bootstrap CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
@@ -15,7 +15,7 @@
             color: #f8f9fa;
         }
         .container {
-            margin-top: 100px;
+            margin-top: 80px;
         }
         .card {
             padding: 30px;
@@ -123,8 +123,16 @@
         <div class="row justify-content-center">
             <div class="col-md-8">
                 <div class="card">
-                    <h2 class="text-center mb-4">IMD Rainfall Data Extractor</h2>
+                    <h2 class="text-center mb-4">IMD Data Extractor</h2>
                     <form method="POST" action="/submit" enctype="multipart/form-data">
+                        <!-- Data Type Selection -->
+                        <div class="mb-3">
+                            <label for="dataType" class="form-label">Select Data Type:</label>
+                            <select id="dataType" class="form-select" name="dataType">
+                                <option value="rainfall">Rainfall</option>
+                                <option value="temperature">Temperature</option>
+                            </select>
+                        </div>
                         <!-- Year Input Section -->
                         <div class="mb-3">
                             <label for="yearType" class="form-label">Year Input Type:</label>
@@ -171,7 +179,7 @@
 
                         <!-- Submit Button -->
                         <div class="d-grid">
-                            <button type="submit" class="btn btn-success">Get Rainfall Data</button>
+                            <button type="submit" class="btn btn-success">Get Data</button>
                         </div>
                     </form>
                 </div>
