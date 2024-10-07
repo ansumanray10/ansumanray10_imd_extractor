@@ -4,11 +4,13 @@ import numpy as np
 import pandas as pd
 from flask import Flask, request, send_file, flash, render_template
 import zipfile
+from temp_extractor import extract_coordinates_data as extract_temp_data  # Import temp extraction function
 
 app = Flask(__name__)
 
 # Define the location where NetCDF files are stored
-NETCDF_DIR = '/persistent_data/rainfall_nc/'
+NETCDF_DIR = '/persistent_data/rainfall_nc/'  # For rainfall NetCDF files
+TEMP_DIR = '/persistent_data/temp_grd/'  # For temperature .GRD files
 
 @app.route('/')
 def index():
@@ -26,6 +28,7 @@ def terms_of_service():
 def submit():
     year_type = request.form.get('yearType')
     coord_type = request.form.get('coordType')
+    data_type = request.form.get('dataType')  # Get whether user selects Rainfall or Temperature
 
     try:
         if coord_type == 'single':
@@ -35,7 +38,10 @@ def submit():
             if year_type == 'single':
                 year = request.form.get('year')
                 if year and latitude and longitude:
-                    return process_single_coordinate_single_year(float(latitude), float(longitude), int(year))
+                    if data_type == 'rainfall':
+                        return process_single_coordinate_single_year_rainfall(float(latitude), float(longitude), int(year))
+                    elif data_type == 'temperature':
+                        return process_single_coordinate_single_year_temperature(float(latitude), float(longitude), int(year))
                 else:
                     flash("Please provide valid inputs for year, latitude, and longitude.")
                     return render_template('index.html')
@@ -44,7 +50,10 @@ def submit():
                 start_year = request.form.get('start_year')
                 end_year = request.form.get('end_year')
                 if start_year and end_year and latitude and longitude:
-                    return process_single_coordinate_multiple_years(float(latitude), float(longitude), int(start_year), int(end_year))
+                    if data_type == 'rainfall':
+                        return process_single_coordinate_multiple_years_rainfall(float(latitude), float(longitude), int(start_year), int(end_year))
+                    elif data_type == 'temperature':
+                        return process_single_coordinate_multiple_years_temperature(float(latitude), float(longitude), int(start_year), int(end_year))
                 else:
                     flash("Please provide valid inputs for start year, end year, latitude, and longitude.")
                     return render_template('index.html')
@@ -60,7 +69,10 @@ def submit():
                 if year_type == 'single':
                     year = request.form.get('year')
                     if year:
-                        return process_multiple_coordinates_single_year(excel_data, int(year))
+                        if data_type == 'rainfall':
+                            return process_multiple_coordinates_single_year_rainfall(excel_data, int(year))
+                        elif data_type == 'temperature':
+                            return process_multiple_coordinates_single_year_temperature(excel_data, int(year))
                     else:
                         flash("Please provide a valid year.")
                         return render_template('index.html')
@@ -69,7 +81,10 @@ def submit():
                     start_year = request.form.get('start_year')
                     end_year = request.form.get('end_year')
                     if start_year and end_year:
-                        return process_multiple_coordinates_multiple_years(excel_data, int(start_year), int(end_year))
+                        if data_type == 'rainfall':
+                            return process_multiple_coordinates_multiple_years_rainfall(excel_data, int(start_year), int(end_year))
+                        elif data_type == 'temperature':
+                            return process_multiple_coordinates_multiple_years_temperature(excel_data, int(start_year), int(end_year))
                     else:
                         flash("Please provide valid inputs for start year and end year.")
                         return render_template('index.html')
@@ -82,107 +97,81 @@ def submit():
         flash(f"An error occurred: {e}")
         return render_template('index.html')
 
-def process_single_coordinate_single_year(latitude, longitude, year):
-    """Process a single coordinate for a single year and return the CSV file with one sheet."""
+# Rainfall Processing Functions (unchanged)
+def process_single_coordinate_single_year_rainfall(latitude, longitude, year):
+    """Process a single coordinate for a single year for rainfall data."""
     data_frames = []
     process_nc_file(year, latitude, longitude, data_frames)
     return prepare_and_send_csv(data_frames, latitude, longitude, year)
 
-def process_single_coordinate_multiple_years(latitude, longitude, start_year, end_year):
-    """Process a single coordinate for a range of years and return the CSV file with multiple sheets."""
+def process_single_coordinate_multiple_years_rainfall(latitude, longitude, start_year, end_year):
+    """Process a single coordinate for a range of years for rainfall data."""
     data_frames = []
     for year in range(start_year, end_year + 1):
         process_nc_file(year, latitude, longitude, data_frames)
     return prepare_and_send_csv(data_frames, latitude, longitude, f'{start_year}_{end_year}', is_multiple_files=True)
 
-def process_multiple_coordinates_single_year(excel_data, year):
-    """Process multiple coordinates for a single year and return the CSV file with multiple sheets."""
+def process_multiple_coordinates_single_year_rainfall(excel_data, year):
+    """Process multiple coordinates for a single year for rainfall data."""
     data_frames = []
     for _, row in excel_data.iterrows():
         process_nc_file(year, row['Latitude'], row['Longitude'], data_frames)
     return prepare_and_send_csv(data_frames, 'multiple', 'multiple', year, is_multiple_files=True)
 
-def process_multiple_coordinates_multiple_years(excel_data, start_year, end_year):
-    """Process multiple coordinates for a range of years and return the CSV file with multiple sheets."""
+def process_multiple_coordinates_multiple_years_rainfall(excel_data, start_year, end_year):
+    """Process multiple coordinates for a range of years for rainfall data."""
     data_frames = []
     for year in range(start_year, end_year + 1):
         for _, row in excel_data.iterrows():
             process_nc_file(year, row['Latitude'], row['Longitude'], data_frames)
     return prepare_and_send_csv(data_frames, 'multiple', 'multiple', f'{start_year}_{end_year}', is_multiple_files=True)
 
-def process_nc_file(year, latitude, longitude, data_frames):
-    """Processes the NetCDF file for the given year from the persistent storage."""
-    try:
-        # The path of the NetCDF file stored in persistent storage
-        file_path = os.path.join(NETCDF_DIR, f'RF25_ind{year}_rfp25.nc')
-        df = extract_rainfall_data(file_path, latitude, longitude, year)
-        if isinstance(df, pd.DataFrame) and not df.empty:
-            data_frames.append((df, f"{year}_{latitude}_{longitude}"))
-            return True
-        return False
-    except Exception as e:
-        print(f"Error processing file: {e}")
-        return False
+# Temperature Processing Functions
+def process_single_coordinate_single_year_temperature(latitude, longitude, year):
+    """Process a single coordinate for a single year for temperature data."""
+    output_folder = '/persistent_data/output/'
+    grd_file = os.path.join(TEMP_DIR, f'Maxtemp_MaxT_{year}.GRD')
+    extract_temp_data(grd_file, [{'Latitude': latitude, 'Longitude': longitude}], output_folder)
+    zip_path = create_zip(output_folder)
+    return send_file(zip_path, as_attachment=True)
 
-def extract_rainfall_data(file_path, target_lat, target_lon, year):
-    """Extracts the rainfall data for the given coordinates from the NetCDF file."""
-    try:
-        if os.path.exists(file_path):
-            dataset = nc.Dataset(file_path, mode='r')
-            latitudes = dataset.variables['LATITUDE'][:]
-            longitudes = dataset.variables['LONGITUDE'][:]
-            rainfall = dataset.variables['RAINFALL'][:]
-            times = dataset.variables['TIME'][:]
-            time_units = dataset.variables['TIME'].units
-            dates = nc.num2date(times, units=time_units)
+def process_single_coordinate_multiple_years_temperature(latitude, longitude, start_year, end_year):
+    """Process a single coordinate for a range of years for temperature data."""
+    output_folder = '/persistent_data/output/'
+    for year in range(start_year, end_year + 1):
+        grd_file = os.path.join(TEMP_DIR, f'Maxtemp_MaxT_{year}.GRD')
+        extract_temp_data(grd_file, [{'Latitude': latitude, 'Longitude': longitude}], output_folder)
+    zip_path = create_zip(output_folder)
+    return send_file(zip_path, as_attachment=True)
 
-            def find_nearest(array, value):
-                return (np.abs(array - value)).argmin()
+def process_multiple_coordinates_single_year_temperature(excel_data, year):
+    """Process multiple coordinates for a single year for temperature data."""
+    output_folder = '/persistent_data/output/'
+    grd_file = os.path.join(TEMP_DIR, f'Maxtemp_MaxT_{year}.GRD')
+    coordinates = excel_data.to_dict('records')
+    extract_temp_data(grd_file, coordinates, output_folder)
+    zip_path = create_zip(output_folder)
+    return send_file(zip_path, as_attachment=True)
 
-            lat_idx = find_nearest(latitudes, target_lat)
-            lon_idx = find_nearest(longitudes, target_lon)
-            rainfall_data = rainfall[:, lat_idx, lon_idx]
+def process_multiple_coordinates_multiple_years_temperature(excel_data, start_year, end_year):
+    """Process multiple coordinates for a range of years for temperature data."""
+    output_folder = '/persistent_data/output/'
+    coordinates = excel_data.to_dict('records')
+    for year in range(start_year, end_year + 1):
+        grd_file = os.path.join(TEMP_DIR, f'Maxtemp_MaxT_{year}.GRD')
+        extract_temp_data(grd_file, coordinates, output_folder)
+    zip_path = create_zip(output_folder)
+    return send_file(zip_path, as_attachment=True)
 
-            df_extracted = pd.DataFrame({
-                'Date': dates,
-                'Latitude': [target_lat] * len(rainfall_data),
-                'Longitude': [target_lon] * len(rainfall_data),
-                'Rainfall': rainfall_data
-            })
-
-            dataset.close()
-            return df_extracted
-
-    except Exception as e:
-        print(f"Error extracting data from NetCDF: {e}")
-        return None
-
-def prepare_and_send_csv(data_frames, latitude, longitude, year, is_multiple_files=False):
-    """Prepares the response by concatenating data and sending the output as a CSV file."""
-    output_folder = '/persistent_data/output'
-    os.makedirs(output_folder, exist_ok=True)
-    
-    # Save the data as CSV
-    if is_multiple_files:
-        zip_path = os.path.join(output_folder, f'rainfall_data_{latitude}_{longitude}_{year}.zip')
-        csv_paths = []
-        for df, file_name in data_frames:
-            csv_file = os.path.join(output_folder, f'{file_name}.csv')
-            df.to_csv(csv_file, index=False)
-            csv_paths.append(csv_file)
-        
-        # Create a zip file
-        with zipfile.ZipFile(zip_path, 'w') as zipf:
-            for csv_file in csv_paths:
-                zipf.write(csv_file, os.path.basename(csv_file))
-
-        return send_file(zip_path, as_attachment=True)
-
-    else:
-        csv_file = os.path.join(output_folder, f'rainfall_data_{latitude}_{longitude}_{year}.csv')
-        for df, _ in data_frames:
-            df.to_csv(csv_file, index=False)
-        return send_file(csv_file, as_attachment=True)
+def create_zip(output_folder):
+    """Creates a zip file of the output folder content."""
+    zip_path = os.path.join(output_folder, 'output_data.zip')
+    with zipfile.ZipFile(zip_path, 'w') as zipf:
+        for root, _, files in os.walk(output_folder):
+            for file in files:
+                file_path = os.path.join(root, file)
+                zipf.write(file_path, os.path.basename(file_path))
+    return zip_path
 
 if __name__ == '__main__':
     app.run(debug=True)
