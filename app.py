@@ -3,7 +3,7 @@ from rainfall_extractor import submit_rainfall  # Import from rainfall_extractor
 from temp_extractor import submit_temperature  # Import from temp_extractor.py
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'
+app.secret_key = 'bbc887a4a32e9d3d0725ce0d1eef1f2b'  # Use your generated secret key
 
 @app.route('/')
 def index():
