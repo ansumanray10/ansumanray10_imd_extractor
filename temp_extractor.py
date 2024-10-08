@@ -21,7 +21,7 @@ def submit_temperature():
 
             # Validate latitude and longitude format (should end with .5)
             if not (latitude * 10) % 10 == 5 or not (longitude * 10) % 10 == 5:
-                flash("Invalid coordinates. Latitude and Longitude must be in the format of X.5 (e.g., 12.5, 77.5).")
+                flash("Invalid coordinate. Latitude and Longitude must be in the format X.5 (e.g., 12.5, 77.5).")
                 return render_template('index.html')
 
             if year_type == 'single':
@@ -45,21 +45,25 @@ def submit_temperature():
                 return render_template('index.html')
 
             # Validate latitude and longitude format for each row in the Excel file
+            valid_coords = coordinates_df[
+                (coordinates_df['Latitude'] * 10 % 10 == 5) & 
+                (coordinates_df['Longitude'] * 10 % 10 == 5)
+            ]
             invalid_coords = coordinates_df[
                 (coordinates_df['Latitude'] * 10 % 10 != 5) | 
                 (coordinates_df['Longitude'] * 10 % 10 != 5)
             ]
+
             if not invalid_coords.empty:
-                flash("Some coordinates are invalid. Latitude and Longitude must be in the format of X.5 (e.g., 12.5, 77.5).")
-                return render_template('index.html')
+                flash(f"Some coordinates are invalid and will be skipped. Invalid coordinates: {invalid_coords.to_dict(orient='records')}")
 
             if year_type == 'single':
                 year = int(request.form.get('year'))
-                return process_multiple_coordinates_single_year(coordinates_df, year, output_folder)
+                return process_multiple_coordinates_single_year(valid_coords, year, output_folder)
             else:
                 start_year = int(request.form.get('start_year'))
                 end_year = int(request.form.get('end_year'))
-                return process_multiple_coordinates_multiple_years(coordinates_df, start_year, end_year, output_folder)
+                return process_multiple_coordinates_multiple_years(valid_coords, start_year, end_year, output_folder)
 
     except Exception as e:
         flash(f"An error occurred: {e}")
@@ -129,7 +133,7 @@ def process_grd_file(grd_file, latitude, longitude, output_folder, year, grid_sh
     # Extract the temperature data for all days at the grid point
     temperature_values = data[:, lat_idx, lon_idx]
 
-    # Handle no-data value (99.9 in your case); replace with NaN
+    # Handle no-data value (99.9); replace with NaN
     temperature_values = np.where(temperature_values == 99.9, np.nan, temperature_values)
 
     # Generate dates for the year (assuming 1 year of daily data)
@@ -146,7 +150,7 @@ def process_grd_file(grd_file, latitude, longitude, output_folder, year, grid_sh
     # Ensure the output folder exists
     os.makedirs(output_folder, exist_ok=True)
 
-    # Save the DataFrame to an Excel file
+    # Save the DataFrame to a CSV file
     output_file = os.path.join(output_folder, f"temperature_data_{latitude}_{longitude}_{year}.csv")
     df.to_csv(output_file, index=False)
 
