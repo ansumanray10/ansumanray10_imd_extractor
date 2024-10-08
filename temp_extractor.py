@@ -57,6 +57,10 @@ def submit_temperature():
             if not invalid_coords.empty:
                 flash(f"Some coordinates are invalid and will be skipped. Invalid coordinates: {invalid_coords.to_dict(orient='records')}")
 
+            if valid_coords.empty:
+                flash("No valid coordinates to process.")
+                return render_template('index.html')
+
             if year_type == 'single':
                 year = int(request.form.get('year'))
                 return process_multiple_coordinates_single_year(valid_coords, year, output_folder)
